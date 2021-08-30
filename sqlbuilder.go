@@ -8,6 +8,7 @@ import (
 	"github.com/didi/gendry/builder"
 	"github.com/didi/gendry/scanner"
 	"github.com/google/wire"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -22,16 +23,18 @@ type ISqlBuilder interface{}
 
 // SqlBuilder
 type SqlBuilder struct {
-	Query *Query
+	logger *zap.Logger
+	Query  *Query
 }
 
 // NewSqlBuilder
-func NewSqlBuilder(config *Config) *SqlBuilder {
-	mgr, err := NewManager(config)
+func NewSqlBuilder(config *Config, logger *zap.Logger) *SqlBuilder {
+	mgr, err := NewManager(config, logger)
 	if err != nil {
 		log.Fatalf("mysql manager error: %s", err.Error())
 	}
 	return &SqlBuilder{
+		logger: logger.With(zap.String("type", "SqlBuilder")),
 		Query: &Query{
 			Manager: mgr,
 		},
@@ -45,7 +48,7 @@ func (s *SqlBuilder) SqlQuery(ctx context.Context, sqlStr string, bindMap map[st
 	if err != nil {
 		return err
 	}
-	log.Printf("%v, %v", cond, val)
+	s.logger.Sugar().Infof("%v, %v", cond, val)
 	return s.querySql(ctx, cond, val, entity)
 }
 
@@ -69,7 +72,7 @@ func (s *SqlBuilder) Find(ctx context.Context, entity interface{}, table string,
 	if nil != err {
 		return err
 	}
-	log.Printf("%v, %v", cond, val)
+	s.logger.Sugar().Infof("%v, %v", cond, val)
 
 	return s.querySql(ctx, cond, val, entity)
 }
@@ -89,7 +92,7 @@ func (s *SqlBuilder) FindAll(ctx context.Context, entity interface{}, table stri
 	if nil != err {
 		return err
 	}
-	log.Printf("%v, %v", cond, val)
+	s.logger.Sugar().Infof("%v, %v", cond, val)
 
 	return s.querySql(ctx, cond, val, entity)
 }
@@ -101,7 +104,7 @@ func (s *SqlBuilder) Execute(ctx context.Context, sqlStr string, bindMap map[str
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("%v, %v", cond, val)
+	s.logger.Sugar().Infof("%v, %v", cond, val)
 
 	return s.execSql(ctx, cond, val)
 }
@@ -115,7 +118,7 @@ func (s *SqlBuilder) Insert(ctx context.Context, table string, data []map[string
 	if nil != err {
 		return 0, err
 	}
-	log.Printf("%v, %v", cond, val)
+	s.logger.Sugar().Infof("%v, %v", cond, val)
 
 	return s.execSql(ctx, cond, val)
 }
@@ -129,7 +132,7 @@ func (s *SqlBuilder) Update(ctx context.Context, table string, where, data map[s
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("%v, %v", cond, val)
+	s.logger.Sugar().Infof("%v, %v", cond, val)
 
 	return s.execSql(ctx, cond, val)
 }
@@ -143,7 +146,7 @@ func (s *SqlBuilder) Delete(ctx context.Context, table string, where map[string]
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("%v, %v", cond, val)
+	s.logger.Sugar().Infof("%v, %v", cond, val)
 
 	return s.execSql(ctx, cond, val)
 }

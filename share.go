@@ -4,14 +4,13 @@ import (
 	"github.com/google/wire"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
 // Provider
 var Provider = wire.NewSet(NewConfig, NewSqlBuilder)
 
 // NewConfig
-func NewConfig(v *viper.Viper, logger *zap.Logger) (*Config, error) {
+func NewConfig(v *viper.Viper) (*Config, error) {
 	var err error
 	o := new(Config)
 	if err = v.UnmarshalKey("mysql", o); err != nil {
@@ -27,8 +26,6 @@ func NewConfig(v *viper.Viper, logger *zap.Logger) (*Config, error) {
 			},
 		}
 	}
-
-	logger.Info("load options success")
 
 	return o, err
 }
