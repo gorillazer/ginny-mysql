@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // init mysql driver
+	"go.uber.org/zap"
 )
 
 // 默认的keepalive间隔 3h
@@ -21,10 +21,11 @@ type Manager struct {
 
 	ctx    context.Context //控制keepalive goroutine结束
 	cancel context.CancelFunc
+	logger *zap.Logger
 }
 
 // NewManager 根据基础配置 初始化数据库
-func NewManager(config *Config) (*Manager, error) {
+func NewManager(config *Config, logger *zap.Logger) (*Manager, error) {
 	writeDB, err := newDB(&config.WDB, config)
 	if err != nil {
 		return nil, err
@@ -44,7 +45,7 @@ func NewManager(config *Config) (*Manager, error) {
 		readDBs = append(readDBs, readDB)
 	}
 
-	return NewManagerFromSQLDB(writeDB, readDBs, time.Duration(config.Keepalive)*time.Second), nil
+	return NewManagerFromSQLDB(writeDB, readDBs, time.Duration(config.Keepalive)*time.Second, logger), nil
 }
 
 // RDB 随机返回一个读库
@@ -61,11 +62,11 @@ func (m *Manager) WDB() *sql.DB {
 func (m *Manager) Close() {
 	m.cancel()
 	if err := m.writeDB.Close(); err != nil {
-		log.Fatal(fmt.Sprintf("close db write pool error: %s", err.Error()))
+		m.logger.Fatal("close db write pool error: ", zap.Error(err))
 	}
 	for i := 0; i < len(m.readDBs); i++ {
 		if err := m.readDBs[i].Close(); err != nil {
-			log.Fatal(fmt.Sprintf("close db read pool error: %s", err.Error()))
+			m.logger.Fatal("close db read pool error: ", zap.Error(err))
 		}
 	}
 }
@@ -87,13 +88,13 @@ func newDB(source *Source, config *Config) (*sql.DB, error) {
 }
 
 // NewManagerFromSQLDB 根据SqlDB对象 初始化数据库
-func NewManagerFromSQLDB(writeDB *sql.DB, readDBs []*sql.DB, keepaliveInterval time.Duration) *Manager {
+func NewManagerFromSQLDB(writeDB *sql.DB, readDBs []*sql.DB, keepaliveInterval time.Duration, logger *zap.Logger) *Manager {
 	rand.Seed(time.Now().Unix())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go keepalive(ctx, writeDB, keepaliveInterval)
+	go keepalive(ctx, writeDB, keepaliveInterval, logger)
 	for i := 0; i < len(readDBs); i++ {
-		go keepalive(ctx, readDBs[i], keepaliveInterval)
+		go keepalive(ctx, readDBs[i], keepaliveInterval, logger)
 	}
 
 	return &Manager{
@@ -101,11 +102,12 @@ func NewManagerFromSQLDB(writeDB *sql.DB, readDBs []*sql.DB, keepaliveInterval t
 		readDBs: readDBs,
 		ctx:     ctx,
 		cancel:  cancel,
+		logger:  logger.With(zap.String("type", "DBManager")),
 	}
 }
 
 // 定时ping db 保持连接激活
-func keepalive(ctx context.Context, db *sql.DB, interval time.Duration) {
+func keepalive(ctx context.Context, db *sql.DB, interval time.Duration, logger *zap.Logger) {
 	if interval.Nanoseconds() == 0 {
 		interval = defaultKeepalive
 	}
@@ -114,11 +116,11 @@ func keepalive(ctx context.Context, db *sql.DB, interval time.Duration) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Print("keepalive db end")
+			logger.Info("keepalive db end")
 			return
 		case <-ticker.C:
 			if err := db.Ping(); err != nil {
-				log.Print(fmt.Errorf("keepalive db ping error: %s", err.Error()))
+				logger.Error("keepalive db ping error", zap.Error(err))
 			}
 		}
 	}
