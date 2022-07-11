@@ -8,6 +8,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // init mysql driver
+	"github.com/goriller/ginny-util/graceful"
 	"go.uber.org/zap"
 )
 
@@ -44,8 +45,15 @@ func NewMysqlDB(ctx context.Context, config *Config, logger *zap.Logger) (*Mysql
 		readDBs = append(readDBs, readDB)
 	}
 
-	return NewMysqlDBFromSqlDB(ctx, writeDB, readDBs,
-		time.Duration(config.Keepalive)*time.Second, logger), nil
+	db := NewMysqlDBFromSqlDB(ctx, writeDB, readDBs,
+		time.Duration(config.Keepalive)*time.Second, logger)
+
+	// graceful
+	graceful.AddCloser(func(ctx context.Context) error {
+		return db.Close()
+	})
+
+	return db, nil
 }
 
 // RDB 随机返回一个读库
@@ -59,16 +67,19 @@ func (m *MysqlDB) WDB() *sql.DB {
 }
 
 // Close 关闭所有读写连接池，停止keepalive保活协程。该函数应当很少使用到
-func (m *MysqlDB) Close() {
+func (m *MysqlDB) Close() error {
 	m.cancel()
 	if err := m.writeDB.Close(); err != nil {
-		m.logger.With(zap.String("action", "mysql")).Fatal("close write db error", zap.Error(err))
+		m.logger.With(zap.String("action", "mysql")).Error("close write db error", zap.Error(err))
+		return err
 	}
 	for i := 0; i < len(m.readDBs); i++ {
 		if err := m.readDBs[i].Close(); err != nil {
-			m.logger.With(zap.String("action", "mysql")).Fatal("close db read pool error", zap.Error(err))
+			m.logger.With(zap.String("action", "mysql")).Error("close db read pool error", zap.Error(err))
+			return err
 		}
 	}
+	return nil
 }
 
 //
