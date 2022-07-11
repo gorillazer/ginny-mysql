@@ -31,8 +31,13 @@ func NewMysqlDB(ctx context.Context, config *Config, logger *zap.Logger) (*Mysql
 		return nil, err
 	}
 	// RDB多个
-	readDBs := make([]*sql.DB, 0, len(config.RDBs))
-	for i := 0; i < len(config.RDBs); i++ {
+	rDBLen := len(config.RDBs)
+	// 未配置rdb
+	if rDBLen == 0 {
+		config.RDBs = append(config.RDBs, config.WDB)
+	}
+	readDBs := make([]*sql.DB, 0, rDBLen)
+	for i := 0; i < rDBLen; i++ {
 		source := &Source{
 			Host: config.RDBs[i].Host,
 			User: config.RDBs[i].User,
