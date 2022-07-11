@@ -22,7 +22,7 @@ func NewTrans(ctx context.Context, tx *sql.Tx) context.Context {
 }
 
 // 执行事务
-func Transaction(c context.Context, m *Manager, fn func(ctx context.Context) error) error {
+func Transaction(c context.Context, m *MysqlDB, fn func(ctx context.Context) error) error {
 	var err error
 	ctx, tx := GetTrans(c)
 	if tx == nil {

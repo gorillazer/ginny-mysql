@@ -2,12 +2,11 @@ package mysql
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"log"
 
 	"github.com/didi/gendry/builder"
 	"github.com/didi/gendry/scanner"
-	"github.com/google/wire"
 	"go.uber.org/zap"
 )
 
@@ -15,45 +14,56 @@ func init() {
 	scanner.SetTagName("json")
 }
 
-// SqlBuilderProvider
-var SqlBuilderProvider = wire.NewSet(NewSqlBuilder, wire.Bind(new(ISqlBuilder), new(*SqlBuilder)))
-
-// ISqlBuilder
-type ISqlBuilder interface{}
-
 // SqlBuilder
 type SqlBuilder struct {
+	DB     *MysqlDB
+	Query  *query
 	logger *zap.Logger
-	Query  *Query
 }
 
 // NewSqlBuilder
-func NewSqlBuilder(config *Config, logger *zap.Logger) *SqlBuilder {
-	mgr, err := NewManager(config, logger)
+func NewSqlBuilder(ctx context.Context, config *Config, logger *zap.Logger) *SqlBuilder {
+	mgr, err := NewMysqlDB(ctx, config, logger)
 	if err != nil {
-		log.Fatalf("mysql manager error: %s", err.Error())
+		logger.With(zap.String("action", "SqlBuilder")).Fatal("mysql db error:", zap.Error(err))
 	}
 	return &SqlBuilder{
-		logger: logger.With(zap.String("type", "SqlBuilder")),
-		Query: &Query{
-			Manager: mgr,
+		DB: mgr,
+		Query: &query{
+			MysqlDB: mgr,
 		},
 	}
 }
 
-// SqlQuery by native sql
-func (s *SqlBuilder) SqlQuery(ctx context.Context, sqlStr string, bindMap map[string]interface{}, entity interface{}) error {
+// QuerySql by native sql
+func (s *SqlBuilder) QuerySql(ctx context.Context, sqlStr string,
+	bindMap map[string]interface{}, entity interface{}) error {
 	var err error
 	cond, val, err := builder.NamedQuery(sqlStr, bindMap)
 	if err != nil {
 		return err
 	}
-	s.logger.Sugar().Infof("%v, %v", cond, val)
+	s.logger.With(zap.String("action", "SqlBuilder")).Info("sql:",
+		zap.String("cond", cond), zap.Any("val", val))
 	return s.querySql(ctx, cond, val, entity)
 }
 
+// ExecuteSql by native sql
+func (s *SqlBuilder) ExecuteSql(ctx context.Context, sqlStr string,
+	bindMap map[string]interface{}) (int64, error) {
+	var err error
+	cond, val, err := builder.NamedQuery(sqlStr, bindMap)
+	if err != nil {
+		return 0, err
+	}
+	s.logger.With(zap.String("action", "SqlBuilder")).Info("sql:",
+		zap.String("cond", cond), zap.Any("val", val))
+	return s.execSql(ctx, cond, val)
+}
+
 //Find gets one record from table by condition "where"
-func (s *SqlBuilder) Find(ctx context.Context, entity interface{}, table string, where map[string]interface{}, selectFields ...[]string) error {
+func (s *SqlBuilder) Find(ctx context.Context, entity interface{},
+	table string, where map[string]interface{}, selectFields ...[]string) error {
 	if table == "" {
 		return errors.New("table name couldn't be empty")
 	}
@@ -72,13 +82,14 @@ func (s *SqlBuilder) Find(ctx context.Context, entity interface{}, table string,
 	if nil != err {
 		return err
 	}
-	s.logger.Sugar().Infof("%v, %v", cond, val)
-
+	s.logger.With(zap.String("action", "SqlBuilder")).Info("sql:",
+		zap.String("cond", cond), zap.Any("val", val))
 	return s.querySql(ctx, cond, val, entity)
 }
 
 //FindAll gets multiple records from table by condition "where"
-func (s *SqlBuilder) FindAll(ctx context.Context, entity interface{}, table string, where map[string]interface{}, selectFields ...[]string) error {
+func (s *SqlBuilder) FindAll(ctx context.Context, entity interface{},
+	table string, where map[string]interface{}, selectFields ...[]string) error {
 	if table == "" {
 		return errors.New("table name couldn't be empty")
 	}
@@ -92,53 +103,48 @@ func (s *SqlBuilder) FindAll(ctx context.Context, entity interface{}, table stri
 	if nil != err {
 		return err
 	}
-	s.logger.Sugar().Infof("%v, %v", cond, val)
-
+	s.logger.With(zap.String("action", "SqlBuilder")).Info("sql:",
+		zap.String("cond", cond), zap.Any("val", val))
 	return s.querySql(ctx, cond, val, entity)
 }
 
-// Execute by native sql
-func (s *SqlBuilder) Execute(ctx context.Context, sqlStr string, bindMap map[string]interface{}) (int64, error) {
-	var err error
-	cond, val, err := builder.NamedQuery(sqlStr, bindMap)
-	if err != nil {
-		return 0, err
-	}
-	s.logger.Sugar().Infof("%v, %v", cond, val)
-
-	return s.execSql(ctx, cond, val)
-}
-
-//Insert inserts an array of data into table
-func (s *SqlBuilder) Insert(ctx context.Context, table string, data []map[string]interface{}) (int64, error) {
+//Insert inserts data into table
+func (s *SqlBuilder) Insert(ctx context.Context, table string, entity interface{}) (int64, error) {
 	if table == "" {
 		return 0, errors.New("table name couldn't be empty")
 	}
+	dataMap, err := ConvertEntityToMap(entity)
+	if err != nil {
+		return 0, err
+	}
+	data := []map[string]interface{}{dataMap}
 	cond, val, err := builder.BuildInsert(table, data)
 	if nil != err {
 		return 0, err
 	}
-	s.logger.Sugar().Infof("%v, %v", cond, val)
-
+	s.logger.With(zap.String("action", "SqlBuilder")).Info("sql:",
+		zap.String("cond", cond), zap.Any("val", val))
 	return s.execSql(ctx, cond, val)
 }
 
 //Update updates the table COLUMNS
-func (s *SqlBuilder) Update(ctx context.Context, table string, where, data map[string]interface{}) (int64, error) {
+func (s *SqlBuilder) Update(ctx context.Context, table string,
+	where, update map[string]interface{}) (int64, error) {
 	if table == "" {
 		return 0, errors.New("table name couldn't be empty")
 	}
-	cond, val, err := builder.BuildUpdate(table, where, data)
+	cond, val, err := builder.BuildUpdate(table, where, update)
 	if err != nil {
 		return 0, err
 	}
-	s.logger.Sugar().Infof("%v, %v", cond, val)
-
+	s.logger.With(zap.String("action", "SqlBuilder")).Info("sql:",
+		zap.String("cond", cond), zap.Any("val", val))
 	return s.execSql(ctx, cond, val)
 }
 
 // Delete deletes matched records in COLUMNS
-func (s *SqlBuilder) Delete(ctx context.Context, table string, where map[string]interface{}) (int64, error) {
+func (s *SqlBuilder) Delete(ctx context.Context, table string,
+	where map[string]interface{}) (int64, error) {
 	if table == "" {
 		return 0, errors.New("table name couldn't be empty")
 	}
@@ -146,14 +152,15 @@ func (s *SqlBuilder) Delete(ctx context.Context, table string, where map[string]
 	if err != nil {
 		return 0, err
 	}
-	s.logger.Sugar().Infof("%v, %v", cond, val)
-
+	s.logger.With(zap.String("action", "SqlBuilder")).Info("sql:",
+		zap.String("cond", cond), zap.Any("val", val))
 	return s.execSql(ctx, cond, val)
 }
 
 // querySql
-func (s *SqlBuilder) querySql(ctx context.Context, cond string, val []interface{}, entity interface{}) error {
-	stmt, err := s.Query.Manager.RDB().PrepareContext(ctx, cond)
+func (s *SqlBuilder) querySql(ctx context.Context, cond string,
+	val []interface{}, entity interface{}) error {
+	stmt, err := s.Query.MysqlDB.RDB().PrepareContext(ctx, cond)
 	if err != nil {
 		return err
 	}
@@ -175,7 +182,7 @@ func (s *SqlBuilder) querySql(ctx context.Context, cond string, val []interface{
 
 // execSql
 func (s *SqlBuilder) execSql(ctx context.Context, cond string, val []interface{}) (int64, error) {
-	stmt, err := s.Query.Manager.WDB().PrepareContext(ctx, cond)
+	stmt, err := s.Query.MysqlDB.WDB().PrepareContext(ctx, cond)
 	if err != nil {
 		return 0, err
 	}
@@ -189,4 +196,18 @@ func (s *SqlBuilder) execSql(ctx context.Context, cond string, val []interface{}
 		}
 	}()
 	return result.RowsAffected()
+}
+
+// ConvertEntityToMap
+func ConvertEntityToMap(entity interface{}) (map[string]interface{}, error) {
+	entityMap := make(map[string]interface{})
+	bt, err := json.Marshal(entity)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(bt, &entityMap)
+	if err != nil {
+		return nil, err
+	}
+	return entityMap, nil
 }

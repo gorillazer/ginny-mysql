@@ -3,6 +3,9 @@ package mysql
 import (
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 )
 
 // Config DB基础配置
@@ -21,6 +24,26 @@ type Source struct {
 	Host string `json:"host" mapstructure:"host"`
 	User string `json:"user" mapstructure:"user"`
 	Pass string `json:"pass" mapstructure:"pass"`
+}
+
+// NewConfig
+func NewConfig(v *viper.Viper) (*Config, error) {
+	var err error
+	o := new(Config)
+	if err = v.UnmarshalKey("mysql", o); err != nil {
+		return nil, errors.Wrap(err, "unmarshal app option error")
+	}
+
+	if o.RDBs == nil || len(o.RDBs) == 0 {
+		o.RDBs = []Source{
+			{
+				Host: o.WDB.Host,
+				User: o.WDB.User,
+				Pass: o.WDB.Pass,
+			},
+		}
+	}
+	return o, nil
 }
 
 // String 打印可输出的配置
