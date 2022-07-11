@@ -87,7 +87,7 @@ func (m *MysqlDB) Close() error {
 	return nil
 }
 
-//
+// newDB
 func newDB(ctx context.Context, source *Source, config *Config) (*sql.DB, error) {
 	// user:pass@tcp(ip:port)/dbname
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=true&loc=Local&multiStatements=true",
