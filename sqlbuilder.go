@@ -22,17 +22,17 @@ type SqlBuilder struct {
 }
 
 // NewSqlBuilder
-func NewSqlBuilder(ctx context.Context, config *Config, logger *zap.Logger) *SqlBuilder {
+func NewSqlBuilder(ctx context.Context, config *Config, logger *zap.Logger) (*SqlBuilder, error) {
 	mgr, err := NewMysqlDB(ctx, config, logger)
 	if err != nil {
-		logger.With(zap.String("action", "SqlBuilder")).Fatal("mysql db error:", zap.Error(err))
+		return nil, err
 	}
 	return &SqlBuilder{
 		DB: mgr,
 		Query: &query{
 			MysqlDB: mgr,
 		},
-	}
+	}, nil
 }
 
 // QuerySql by native sql
