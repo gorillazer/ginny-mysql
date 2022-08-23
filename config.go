@@ -16,7 +16,6 @@ type Config struct {
 	MaxOpenConn int      `json:"max_open_conn" mapstructure:"max_open_conn"`
 	MaxIdleConn int      `json:"max_idle_conn" mapstructure:"max_idle_conn"`
 	MaxLifetime int      `json:"max_lifetime" mapstructure:"max_lifetime"`
-	Keepalive   int      `json:"keepalive" mapstructure:"keepalive"`
 }
 
 // Source DB部署实例数据源配置
@@ -32,6 +31,10 @@ func NewConfig(v *viper.Viper) (*Config, error) {
 	o := new(Config)
 	if err = v.UnmarshalKey("mysql", o); err != nil {
 		return nil, errors.Wrap(err, "unmarshal app option error")
+	}
+
+	if o.MaxLifetime == 0 {
+		o.MaxLifetime = 600 // 600s
 	}
 
 	if o.RDBs == nil || len(o.RDBs) == 0 {
@@ -61,6 +64,5 @@ func (c *Config) String() string {
 	fmt.Fprintln(&str, "max_open_conn:", c.MaxOpenConn)
 	fmt.Fprintln(&str, "max_idle_conn:", c.MaxIdleConn)
 	fmt.Fprintln(&str, "max_lifetime:", c.MaxLifetime)
-	fmt.Fprintln(&str, "keepalive:", c.Keepalive)
 	return str.String()
 }
