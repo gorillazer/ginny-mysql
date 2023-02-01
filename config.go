@@ -20,9 +20,9 @@ type Config struct {
 
 // Source DB部署实例数据源配置
 type Source struct {
-	Host string `json:"host" mapstructure:"host"`
-	User string `json:"user" mapstructure:"user"`
-	Pass string `json:"pass" mapstructure:"pass"`
+	Host     string `json:"host" mapstructure:"host"`
+	UserName string `json:"user" mapstructure:"password"`
+	PassWord string `json:"pass" mapstructure:"password"`
 }
 
 // NewConfig
@@ -40,9 +40,9 @@ func NewConfig(v *viper.Viper) (*Config, error) {
 	if o.RDBs == nil || len(o.RDBs) == 0 {
 		o.RDBs = []Source{
 			{
-				Host: o.WDB.Host,
-				User: o.WDB.User,
-				Pass: o.WDB.Pass,
+				Host:     o.WDB.Host,
+				UserName: o.WDB.UserName,
+				PassWord: o.WDB.PassWord,
 			},
 		}
 	}
@@ -51,7 +51,7 @@ func NewConfig(v *viper.Viper) (*Config, error) {
 
 // String 打印可输出的配置
 func (s *Source) String() string {
-	return fmt.Sprintf("host:%s user:%s", s.Host, s.User)
+	return fmt.Sprintf("host:%s user:%s", s.Host, s.UserName)
 }
 
 // String 打印可输出的配置

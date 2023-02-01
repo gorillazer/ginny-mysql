@@ -34,9 +34,9 @@ func NewMysqlDB(ctx context.Context, config *Config, logger *zap.Logger) (*Mysql
 	readDBs := make([]*sql.DB, 0, rDBLen)
 	for i := 0; i < rDBLen; i++ {
 		source := &Source{
-			Host: config.RDBs[i].Host,
-			User: config.RDBs[i].User,
-			Pass: config.RDBs[i].Pass,
+			Host:     config.RDBs[i].Host,
+			UserName: config.RDBs[i].UserName,
+			PassWord: config.RDBs[i].PassWord,
 		}
 		readDB, err := newDB(ctx, source, config)
 		if err != nil {
@@ -88,7 +88,7 @@ func (m *MysqlDB) Close() error {
 func newDB(ctx context.Context, source *Source, config *Config) (*sql.DB, error) {
 	// user:pass@tcp(ip:port)/dbname
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=true&loc=Local&multiStatements=true",
-		source.User, source.Pass, source.Host, config.DBName)
+		source.UserName, source.PassWord, source.Host, config.DBName)
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
